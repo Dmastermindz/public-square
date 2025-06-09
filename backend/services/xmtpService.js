@@ -115,18 +115,22 @@ export async function ensureGlobalGroup() {
       globalGroup = conversations.find((conv) => conv.id === existingGroupId);
 
       if (globalGroup) {
-        console.log("✅ Found existing global group!");
-        console.log(`📊 Group details:`, {
+        console.log("🔍 Found existing global group:", {
           id: globalGroup.id,
           name: globalGroup.name,
-          memberCount: globalGroup.members?.length || "unknown",
+          memberCount: "Loading...",
         });
 
-        // Cache existing members
-        if (globalGroup.members) {
-          globalGroup.members.forEach((member) => {
-            memberCache.add(member.toLowerCase());
+        // Cache existing members using the async members() method
+        try {
+          await globalGroup.sync();
+          const members = await globalGroup.members();
+          members.forEach((member) => {
+            memberCache.add(member.inboxId.toLowerCase());
           });
+          console.log(`✅ Cached ${members.length} existing members`);
+        } catch (error) {
+          console.warn("⚠️ Failed to load existing members:", error.message);
         }
 
         return globalGroup;
@@ -167,9 +171,17 @@ export async function ensureGlobalGroup() {
 /**
  * Get global group information
  */
-export function getGlobalGroupInfo() {
+export async function getGlobalGroupInfo() {
   if (!globalGroup) {
     throw new Error("Global group not initialized");
+  }
+
+  let memberCount = 0;
+  try {
+    const members = await globalGroup.members();
+    memberCount = members.length;
+  } catch (error) {
+    console.warn("⚠️ Failed to get member count:", error.message);
   }
 
   return {
@@ -177,7 +189,7 @@ export function getGlobalGroupInfo() {
     masterAddress: masterWallet?.address,
     groupName: globalGroup.name || process.env.GLOBAL_GROUP_NAME,
     description: globalGroup.description || process.env.GLOBAL_GROUP_DESCRIPTION,
-    memberCount: globalGroup.members?.length || 0,
+    memberCount: memberCount,
   };
 }
 
@@ -252,24 +264,20 @@ export async function refreshGroupMembers() {
       throw new Error("Global group not initialized");
     }
 
-    // Refresh group data
-    const conversations = await xmtpClient.conversations.list();
-    const refreshedGroup = conversations.find((conv) => conv.id === globalGroup.id);
+    // Sync group data first
+    await globalGroup.sync();
 
-    if (refreshedGroup && refreshedGroup.members) {
-      // Update cache
-      memberCache.clear();
-      refreshedGroup.members.forEach((member) => {
-        memberCache.add(member.toLowerCase());
-      });
+    // Get fresh member list
+    const members = await globalGroup.members();
 
-      globalGroup = refreshedGroup;
+    // Update cache
+    memberCache.clear();
+    members.forEach((member) => {
+      memberCache.add(member.inboxId.toLowerCase());
+    });
 
-      console.log(`🔄 Refreshed group members: ${refreshedGroup.members.length} total`);
-      return refreshedGroup.members;
-    }
-
-    return [];
+    console.log(`🔄 Refreshed group members: ${members.length} total`);
+    return members.map((member) => member.inboxId);
   } catch (error) {
     console.error("❌ Failed to refresh group members:", error);
     throw error;
