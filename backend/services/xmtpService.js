@@ -1,4 +1,4 @@
-import { Client } from "@xmtp/node-sdk";
+import { Client, getInboxIdForIdentifier } from "@xmtp/node-sdk";
 import { ethers } from "ethers";
 import dotenv from "dotenv";
 import crypto from "crypto";
@@ -89,6 +89,10 @@ export async function initializeXMTPClient() {
     });
 
     console.log(`✅ XMTP client initialized successfully on ${xmtpEnv} network`);
+    console.log(`📋 Client properties:`, Object.keys(xmtpClient));
+    console.log(`📋 Client inboxId:`, xmtpClient.inboxId);
+    console.log(`📋 Client address:`, xmtpClient.address);
+
     return xmtpClient;
   } catch (error) {
     console.error("❌ Failed to initialize XMTP client:", error);
@@ -176,6 +180,17 @@ export async function getGlobalGroupInfo() {
     throw new Error("Global group not initialized");
   }
 
+  console.log("🔍 Debug globalGroup object:", {
+    globalGroupExists: !!globalGroup,
+    globalGroupType: typeof globalGroup,
+    globalGroupKeys: Object.keys(globalGroup),
+    globalGroupId: globalGroup.id,
+    globalGroupName: globalGroup.name,
+    globalGroupDescription: globalGroup.description,
+    masterWalletExists: !!masterWallet,
+    masterWalletAddress: masterWallet?.address,
+  });
+
   let memberCount = 0;
   try {
     const members = await globalGroup.members();
@@ -184,17 +199,56 @@ export async function getGlobalGroupInfo() {
     console.warn("⚠️ Failed to get member count:", error.message);
   }
 
-  return {
+  const result = {
     groupId: globalGroup.id,
     masterAddress: masterWallet?.address,
     groupName: globalGroup.name || process.env.GLOBAL_GROUP_NAME,
     description: globalGroup.description || process.env.GLOBAL_GROUP_DESCRIPTION,
     memberCount: memberCount,
   };
+
+  console.log("🔍 Debug getGlobalGroupInfo result:", result);
+
+  return result;
 }
 
 /**
- * Add a user to the global group (send invitation)
+ * Check if a user can receive messages on XMTP (has an identity)
+ */
+export async function checkUserHasXMTPIdentity(address) {
+  try {
+    console.log("🔍 Checking XMTP identity for:", address);
+
+    // Create identity object in the correct XMTP v3 format
+    // identifierKind should be numeric: 0 = ETHEREUM
+    const identity = {
+      identifierKind: 0, // ETHEREUM enum value (numeric)
+      identifier: address,
+    };
+
+    console.log("🔍 Using identity format:", JSON.stringify(identity, null, 2));
+
+    // Check if this identity can receive messages
+    const canMessageResults = await xmtpClient.canMessage([identity]);
+
+    console.log("📊 canMessage results:", canMessageResults);
+
+    // canMessage returns a Map with lowercase address as key, not the identity object
+    const normalizedAddress = address.toLowerCase();
+    const canMessage = canMessageResults.get(normalizedAddress) || false;
+
+    console.log(`✅ User ${address} has XMTP identity:`, canMessage);
+
+    // Return both the boolean result and the full results for potential inbox ID extraction
+    return { hasIdentity: canMessage, results: canMessageResults };
+  } catch (error) {
+    console.error("❌ Error checking XMTP identity:", error);
+    return { hasIdentity: false, results: null };
+  }
+}
+
+/**
+ * Add a user to the global group (send invitation) with retry logic
  */
 export async function inviteUserToGlobalGroup(userAddress) {
   try {
@@ -228,14 +282,133 @@ export async function inviteUserToGlobalGroup(userAddress) {
 
     console.log(`📤 Sending invitation to ${userAddress}...`);
 
-    // Add member to group (this sends the invitation)
-    await globalGroup.addMembers([userAddress]);
+    // Step 1: Check if user has XMTP identity with retry logic
+    let identityCheckResult;
+    let retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = 2000;
+
+    while (retryCount < maxRetries) {
+      try {
+        identityCheckResult = await checkUserHasXMTPIdentity(userAddress);
+        if (identityCheckResult.hasIdentity) {
+          break;
+        }
+
+        // If no identity found, wait and retry (identity might be propagating)
+        if (retryCount < maxRetries - 1) {
+          console.log(`⏳ XMTP identity not found, waiting ${retryDelay}ms before retry ${retryCount + 1}/${maxRetries}...`);
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        }
+
+        retryCount++;
+      } catch (identityError) {
+        console.error(`❌ Error checking identity (attempt ${retryCount + 1}):`, identityError);
+        retryCount++;
+        if (retryCount < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+
+    // If no identity found after retries, return appropriate error
+    if (!identityCheckResult || !identityCheckResult.hasIdentity) {
+      console.log(`⚠️ User ${userAddress} doesn't have an XMTP identity after ${maxRetries} attempts`);
+      return {
+        success: false,
+        message: "User must first create an XMTP client before joining groups. Please connect to XMTP first.",
+        errorType: "NO_XMTP_IDENTITY",
+        statusCode: 400,
+      };
+    }
+
+    console.log(`✅ User has XMTP identity`);
+
+    // Step 2: Get user's inbox ID from their address
+    // In XMTP v3, group membership uses inbox IDs, not Ethereum addresses
+    console.log(`🔄 Getting inbox ID for address: ${userAddress}`);
+
+    let userInboxId;
+    try {
+      // Create identity object for the user
+      const userIdentity = {
+        identifierKind: 0, // ETHEREUM enum value
+        identifier: normalizedAddress,
+      };
+
+      console.log("🔍 Using identity format:", JSON.stringify(userIdentity, null, 2));
+
+      // Try different approaches to get inbox ID
+      // Approach 1: Use the standalone getInboxIdForIdentifier function
+      try {
+        console.log("🔍 Using standalone getInboxIdForIdentifier function...");
+        const xmtpEnv = process.env.XMTP_ENV || "production";
+        userInboxId = await getInboxIdForIdentifier(userIdentity, xmtpEnv);
+        console.log(`📋 Got inbox ID via standalone function: ${userInboxId}`);
+      } catch (standaloneError) {
+        console.log("⚠️ Standalone function failed, trying client method...");
+
+        // Approach 2: Use client instance method
+        if (typeof xmtpClient.getInboxIdByIdentifier === "function") {
+          console.log("🔍 Using client.getInboxIdByIdentifier method...");
+          userInboxId = await xmtpClient.getInboxIdByIdentifier(userIdentity);
+          console.log(`📋 Got inbox ID via client method: ${userInboxId}`);
+        } else {
+          throw new Error("getInboxIdByIdentifier method not available on client");
+        }
+      }
+
+      if (!userInboxId) {
+        throw new Error("Inbox ID not found for user");
+      }
+    } catch (inboxError) {
+      console.error(`❌ Failed to get inbox ID for ${userAddress}:`, inboxError);
+      return {
+        success: false,
+        message: "Unable to determine user's inbox ID. Please try again later.",
+        errorType: "INBOX_ID_ERROR",
+        statusCode: 500,
+      };
+    }
+
+    // Step 3: Add user to group using their inbox ID
+    console.log(`🔄 Adding member with inbox ID: ${userInboxId}`);
+
+    let addSuccess = false;
+    retryCount = 0;
+
+    while (retryCount < maxRetries && !addSuccess) {
+      try {
+        console.log(`🔄 Attempting to add member (attempt ${retryCount + 1}/${maxRetries})...`);
+
+        // Use inbox ID for adding to group (XMTP v3 requirement)
+        await globalGroup.addMembers([userInboxId]);
+        addSuccess = true;
+        console.log(`✅ Successfully added member with inbox ID: ${userInboxId}`);
+      } catch (addError) {
+        console.log(`❌ Add member attempt ${retryCount + 1} failed:`, addError.message);
+
+        // Check if it's a "already a member" error
+        if (addError.message.includes("already a member")) {
+          memberCache.add(normalizedAddress);
+          return { success: true, message: "User is already a member" };
+        }
+
+        retryCount++;
+        if (retryCount < maxRetries) {
+          console.log(`⏳ Waiting ${retryDelay}ms before retry...`);
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+
+    if (!addSuccess) {
+      throw new Error(`Failed to add user to group after ${maxRetries} attempts`);
+    }
 
     // Update caches
     memberCache.add(normalizedAddress);
     invitationQueue.set(normalizedAddress, now);
-
-    console.log(`✅ Invitation sent successfully to ${userAddress}`);
 
     return {
       success: true,
@@ -249,6 +422,17 @@ export async function inviteUserToGlobalGroup(userAddress) {
     if (error.message.includes("already a member")) {
       memberCache.add(userAddress.toLowerCase());
       return { success: true, message: "User is already a member" };
+    }
+
+    // Handle case where user doesn't have XMTP identity yet
+    if (error.message.includes("SequenceId not found") || error.message.includes("invalid hexadecimal digit")) {
+      console.log(`⚠️ User ${userAddress} doesn't have an XMTP identity yet`);
+      return {
+        success: false,
+        message: "User must first create an XMTP client before joining groups. Please connect to XMTP first.",
+        errorType: "NO_XMTP_IDENTITY",
+        statusCode: 400,
+      };
     }
 
     throw error;

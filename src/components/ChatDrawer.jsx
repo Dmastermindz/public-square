@@ -4,6 +4,7 @@ import { useChatDrawer } from "../App.jsx";
 import { Client } from "@xmtp/browser-sdk";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import CallAquariServer from "../api/callAquariServer.js";
+import CallXMTPServer from "../api/callXMTPServer.js";
 
 const GLOBAL_CHAT_NAME = "🌍 Public Square";
 const GLOBAL_CHAT_DESCRIPTION = "The global chatroom for everyone on the platform - where humans and agents coexist!";
@@ -98,7 +99,7 @@ const ChatDrawer = ({ authenticated }) => {
             console.log("Signer getIdentifier called");
             return {
               identifier: address.toLowerCase(),
-              identifierKind: "Ethereum",
+              identifierKind: "Ethereum", // Browser SDK expects string format
             };
           },
           signMessage: async (message) => {
@@ -109,7 +110,7 @@ const ChatDrawer = ({ authenticated }) => {
                 method: "personal_sign",
                 params: [message, address],
               });
-              console.log("Message signed successfully");
+              console.log("✅ Message signed successfully");
 
               // Convert hex string to Uint8Array as required by XMTP v3
               const bytes = new Uint8Array(
@@ -120,7 +121,7 @@ const ChatDrawer = ({ authenticated }) => {
               );
               return bytes;
             } catch (signError) {
-              console.error("Error signing message:", signError);
+              console.error("❌ Error signing message:", signError);
               throw signError;
             }
           },
@@ -137,19 +138,87 @@ const ChatDrawer = ({ authenticated }) => {
 
         console.log("Creating XMTP client...");
 
-        // Add connection timeout
-        const clientPromise = Client.create(signer, {
-          env: "production", // Try production environment instead of dev
-        });
+        // Simplified client creation with identity auto-creation
+        const createClientWithTimeout = async () => {
+          console.log("🔧 Creating XMTP client (will auto-create identity if needed)...");
+
+          const client = await Client.create(signer, {
+            env: "production", // Use production environment
+          });
+
+          console.log("✅ XMTP client created successfully");
+          console.log("📋 Client properties:", Object.keys(client));
+          console.log("📋 Client object:", client);
+          console.log("📋 Checking address properties:", {
+            address: client.address,
+            inboxId: client.inboxId,
+            accountAddress: client.accountAddress,
+            hasSigner: !!client.signer,
+            clientKeys: Object.keys(client),
+          });
+
+          // Try to get address from various client properties or signer
+          let clientAddress;
+          try {
+            if (client.inboxId) {
+              // In XMTP v3, inboxId is the primary identifier
+              clientAddress = client.inboxId;
+              console.log("✅ Using inboxId as identifier:", client.inboxId);
+            } else if (client.address) {
+              clientAddress = client.address;
+            } else if (client.accountAddress) {
+              clientAddress = client.accountAddress;
+            } else if (client.signer && typeof client.signer.getAddress === "function") {
+              clientAddress = await client.signer.getAddress();
+            } else {
+              // Fallback to original wallet address if client doesn't have accessible address
+              clientAddress = address;
+              console.log("⚠️ Using fallback wallet address for verification");
+            }
+          } catch (addressError) {
+            console.log("⚠️ Error getting client address, using wallet address:", addressError);
+            clientAddress = address;
+          }
+
+          // Basic verification - confirm client was created successfully
+          if (client && clientAddress) {
+            console.log("✅ XMTP client created successfully!");
+            console.log("📋 Client identifier:", clientAddress);
+
+            return client;
+          } else {
+            throw new Error("Failed to verify XMTP client - missing client or identifier");
+          }
+        };
 
         // Add timeout to prevent infinite hanging
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("XMTP client creation timed out after 30 seconds")), 30000));
 
         try {
-          const client = await Promise.race([clientPromise, timeoutPromise]);
+          const client = await Promise.race([createClientWithTimeout(), timeoutPromise]);
+
+          // Basic verification
+          if (!client) {
+            throw new Error("XMTP client creation failed");
+          }
+
+          // Try to get address from various possible locations
+          const clientAddress = client.address || client.accountAddress || client.signer?.getAddress?.() || address; // fallback to wallet address
+
+          console.log("✅ XMTP identity confirmed:", {
+            clientAddress: clientAddress,
+            userAddress: address,
+            clientExists: !!client,
+            clientType: typeof client,
+          });
+
           setXmtpClient(client);
           setConnectionStatus("connected");
-          console.log("XMTP client initialized successfully");
+          console.log("✅ XMTP client initialized successfully");
+
+          // Wait a moment for XMTP identity to propagate across the network
+          console.log("⏳ Waiting for XMTP identity to propagate...");
+          await new Promise((resolve) => setTimeout(resolve, 3000)); // Wait 3 seconds
 
           // Load conversations and join/create global chat
           await loadConversations(client);
@@ -192,9 +261,18 @@ const ChatDrawer = ({ authenticated }) => {
       let BACKEND_GROUP_ID;
 
       try {
-        groupInfoResponse = await CallAquariServer.get("/chat/global-group");
-        BACKEND_GROUP_ID = groupInfoResponse.data.groupId;
+        groupInfoResponse = await CallXMTPServer.get("/chat/global-group");
+        console.log("📋 Full backend response:", groupInfoResponse);
+        console.log("📋 Response data:", groupInfoResponse.data);
+        console.log("📋 Response data structure:", Object.keys(groupInfoResponse.data));
+        if (groupInfoResponse.data.data) {
+          console.log("📋 Nested data:", groupInfoResponse.data.data);
+          console.log("📋 Nested data keys:", Object.keys(groupInfoResponse.data.data));
+        }
+
+        BACKEND_GROUP_ID = groupInfoResponse.data.data.groupId;
         console.log("✅ Backend group info:", groupInfoResponse.data);
+        console.log("🆔 Extracted groupId:", BACKEND_GROUP_ID);
       } catch (backendError) {
         console.error("❌ Failed to fetch group info from backend:", backendError);
         // Fallback to hardcoded group ID if backend is unavailable
@@ -213,7 +291,16 @@ const ChatDrawer = ({ authenticated }) => {
 
         // Step 3: Request invitation from backend
         try {
-          await CallAquariServer.post("/chat/request-invitation", {
+          console.log("📤 Sending invitation request with data:", {
+            userAddress: address,
+            groupId: BACKEND_GROUP_ID,
+            addressType: typeof address,
+            groupIdType: typeof BACKEND_GROUP_ID,
+            addressLength: address?.length,
+            addressValid: /^0x[a-fA-F0-9]{40}$/.test(address),
+          });
+
+          await CallXMTPServer.post("/chat/request-invitation", {
             userAddress: address,
             groupId: BACKEND_GROUP_ID,
           });
@@ -232,10 +319,28 @@ const ChatDrawer = ({ authenticated }) => {
           }
 
           console.log("✅ Successfully joined group after invitation!");
-        } catch (invitationError) {
-          console.error("❌ Failed to get invitation:", invitationError);
-          setConnectionError(`Failed to join global chat: ${invitationError.message}`);
-          return;
+        } catch (error) {
+          console.error("❌ Failed to get invitation:", error);
+
+          // Parse error response if available
+          let errorMessage = "Failed to request invitation";
+          let errorType = null;
+
+          if (error.response?.data) {
+            console.log("🔍 Server error response:", error.response.data);
+            errorMessage = error.response.data.message || errorMessage;
+            errorType = error.response.data.errorType;
+          }
+
+          // Handle specific error types
+          if (errorType === "NO_XMTP_IDENTITY") {
+            setConnectionError("⚠️ You need to initialize XMTP first. Please connect your wallet and create an XMTP client before joining groups.");
+          } else {
+            setConnectionError(`❌ ${errorMessage}`);
+          }
+
+          setIsJoiningGlobal(false);
+          return; // Exit the function early to prevent publicSquareGroup undefined error
         }
       }
 
@@ -474,11 +579,29 @@ const ChatDrawer = ({ authenticated }) => {
     const conversationMessages = messages[conversation.id] || [];
     const lastMessage = conversationMessages[conversationMessages.length - 1];
 
+    // Helper function to safely render message content
+    const getSafeMessageContent = (message) => {
+      if (!message) return "No messages yet";
+
+      if (typeof message.content === "string") {
+        return message.content;
+      } else if (typeof message.content === "object" && message.content !== null) {
+        // Handle XMTP group metadata messages
+        if (message.content.initiatedByInboxId || message.content.addedInboxes || message.content.removedInboxes) {
+          return "Group updated";
+        } else {
+          return "Media message";
+        }
+      } else {
+        return "Message content unavailable";
+      }
+    };
+
     return {
       id: conversation.id,
       name: conversation.peerAddress || "Unknown",
       avatar: `https://api.dicebear.com/6.x/initials/svg?seed=${conversation.peerAddress}`,
-      lastMessage: lastMessage ? lastMessage.content : "No messages yet",
+      lastMessage: getSafeMessageContent(lastMessage),
       timestamp: lastMessage ? new Date(lastMessage.sentAt).toLocaleTimeString() : "",
       isOnline: false, // XMTP doesn't provide online status
       unreadCount: 0, // You can implement read receipts separately
@@ -490,11 +613,31 @@ const ChatDrawer = ({ authenticated }) => {
     const globalMessages = messages.global || [];
     const lastMessage = globalMessages[globalMessages.length - 1];
 
+    // Helper function to safely render message content
+    const getSafeMessageContent = (message) => {
+      if (!message) {
+        return globalGroup ? "Welcome to the Public Square!" : "Connecting...";
+      }
+
+      if (typeof message.content === "string") {
+        return message.content;
+      } else if (typeof message.content === "object" && message.content !== null) {
+        // Handle XMTP group metadata messages
+        if (message.content.initiatedByInboxId || message.content.addedInboxes || message.content.removedInboxes) {
+          return "Group updated";
+        } else {
+          return "Media message";
+        }
+      } else {
+        return "Message content unavailable";
+      }
+    };
+
     return {
       id: "global",
       name: GLOBAL_CHAT_NAME,
       avatar: "🌍",
-      lastMessage: lastMessage ? lastMessage.content : globalGroup ? "Welcome to the Public Square!" : "Connecting...",
+      lastMessage: getSafeMessageContent(lastMessage),
       timestamp: lastMessage ? new Date(lastMessage.sentAt).toLocaleTimeString() : "",
       isOnline: true,
       unreadCount: 0,
@@ -781,13 +924,41 @@ const ChatDrawer = ({ authenticated }) => {
                     const isMyMessage = messageSender === address || message.senderInboxId === user?.id;
                     const senderShort = messageSender ? `${messageSender.slice(0, 6)}...${messageSender.slice(-4)}` : "Unknown";
 
+                    // Handle different content types
+                    const renderContent = () => {
+                      if (typeof message.content === "string") {
+                        return message.content;
+                      } else if (typeof message.content === "object" && message.content !== null) {
+                        // Handle XMTP group metadata messages
+                        if (message.content.initiatedByInboxId || message.content.addedInboxes || message.content.removedInboxes) {
+                          // This is a group membership change message
+                          const { initiatedByInboxId, addedInboxes, removedInboxes, metadataFieldChanges } = message.content;
+
+                          if (addedInboxes && addedInboxes.length > 0) {
+                            return `👋 New member joined the group`;
+                          } else if (removedInboxes && removedInboxes.length > 0) {
+                            return `👋 Member left the group`;
+                          } else if (metadataFieldChanges) {
+                            return `📝 Group settings updated`;
+                          } else {
+                            return `🔄 Group updated`;
+                          }
+                        } else {
+                          // For other object types, try to display them safely
+                          return `📎 ${message.contentType || "Media message"}`;
+                        }
+                      } else {
+                        return "Message content unavailable";
+                      }
+                    };
+
                     return (
                       <div
                         key={`${message.id || index}`}
                         className={`flex ${isMyMessage ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-xs px-4 py-2 rounded-lg ${isMyMessage ? "bg-accent-purple text-white" : "bg-accent-purple bg-opacity-20 text-text-primary"}`}>
                           {selectedChat === "global" && !isMyMessage && <p className="text-xs opacity-70 mb-1">{senderShort}</p>}
-                          <p className="text-sm">{message.content}</p>
+                          <p className="text-sm">{renderContent()}</p>
                           <span className="text-xs opacity-70 mt-1 block">{new Date(message.sentAt || message.timestamp || Date.now()).toLocaleTimeString()}</span>
                         </div>
                       </div>

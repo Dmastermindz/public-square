@@ -10,7 +10,13 @@ const router = express.Router();
  */
 router.get("/global-group", async (req, res) => {
   try {
-    const groupInfo = getGlobalGroupInfo();
+    const groupInfo = await getGlobalGroupInfo();
+
+    console.log("📋 Returning global group info:", {
+      groupId: groupInfo.groupId,
+      masterAddress: groupInfo.masterAddress,
+      groupName: groupInfo.groupName,
+    });
 
     res.json({
       success: true,
@@ -62,12 +68,26 @@ router.post(
       const { userAddress, groupId } = req.body;
 
       // Verify the group ID matches our global group
-      const globalGroupInfo = getGlobalGroupInfo();
+      const globalGroupInfo = await getGlobalGroupInfo();
+
+      console.log("🔍 Group ID validation:", {
+        receivedGroupId: groupId,
+        expectedGroupId: globalGroupInfo.groupId,
+        matches: groupId === globalGroupInfo.groupId,
+        receivedType: typeof groupId,
+        expectedType: typeof globalGroupInfo.groupId,
+      });
+
       if (groupId !== globalGroupInfo.groupId) {
+        console.log("❌ Group ID mismatch - rejecting request");
         return res.status(400).json({
           success: false,
           error: "Invalid group ID",
           message: "The provided group ID does not match the global group",
+          debug: {
+            received: groupId,
+            expected: globalGroupInfo.groupId,
+          },
         });
       }
 
@@ -98,7 +118,16 @@ router.post(
             timestamp: new Date().toISOString(),
           },
         });
+      } else if (result.errorType === "NO_XMTP_IDENTITY") {
+        // Handle missing XMTP identity case
+        res.status(400).json({
+          success: false,
+          error: "Missing XMTP Identity",
+          message: result.message,
+          errorType: result.errorType,
+        });
       } else {
+        // Handle cooldown case
         res.status(429).json({
           success: false,
           error: "Invitation cooldown",
@@ -194,7 +223,7 @@ router.post(
  */
 router.get("/stats", async (req, res) => {
   try {
-    const groupInfo = getGlobalGroupInfo();
+    const groupInfo = await getGlobalGroupInfo();
 
     res.json({
       success: true,
