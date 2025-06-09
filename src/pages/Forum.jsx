@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback, useContext } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import CallAquariServer from "../api/callAquariServer.js";
 import ForumCategory from "../components/ForumCategory.jsx";
-import { BlockchainContext } from "../App.jsx";
+import Announcement from "../components/AnnouncementBanner.jsx";
+import InviteSection from "../components/InviteSection.jsx";
 
 const Forum = () => {
-  const { setSelected, user } = useContext(BlockchainContext);
+  const navigate = useNavigate();
   const [forumCategories, setForumCategories] = useState([]);
   const [forumForums, setForumForums] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,21 +62,6 @@ const Forum = () => {
     };
   }, [fetchData, retryCount]);
 
-  useEffect(() => {
-    const addUser = async () => {
-      try {
-        console.log("Adding user...");
-        await CallAquariServer.post("/users", { user_id: user.id.slice(10) });
-        console.log("User added successfully");
-      } catch (error) {
-        console.error("Error Creating New User:", error);
-      }
-    };
-    if (user && user.id) {
-      addUser();
-    }
-  }, [user]);
-
   const SkeletonCategory = () => (
     <div className="flex mb-[2px] mx-[2px] flex-row bg-[#34394d] animate-pulse">
       <div className="flex py-1 flex-grow items-center justify-left bg-accent-purple text-center px-4 bg-opacity-40 h-16"></div>
@@ -113,7 +100,7 @@ const Forum = () => {
     if (forumCategories.length > 0 && forumForums.length > 0) {
       return (
         <ForumCategory
-          setSelected={setSelected}
+          navigate={navigate}
           forumCategories={forumCategories}
           forumForums={forumForums}
         />
@@ -124,7 +111,9 @@ const Forum = () => {
   };
 
   return (
-    <div className="bg-black bg-opacity-[74%] p-4 md:p-12 md:pt-7 min-h-full overflow-y-scroll">
+    <div className="bg-black bg-opacity-[74%] p-4 md:p-12 md:pt-7">
+      <Announcement />
+      <InviteSection />
       <h1 className="text-lg lg:text-2xl font-semibold cursor-pointer select-none tracking-wide text-text-primary">Community Home</h1>
 
       <div className="flex mt-4 rounded-xl bg-[#1d1f31] bg-opacity-0 shadowz w-full min-h-full">

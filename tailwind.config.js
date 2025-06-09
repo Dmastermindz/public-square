@@ -15,6 +15,10 @@ export default {
         "text-secondary": "#e0e0e0",
         "text-muted": "#e1e2e9",
       },
+      width: {
+        240: "240px",
+        480: "480px",
+      },
     },
   },
   plugins: [],

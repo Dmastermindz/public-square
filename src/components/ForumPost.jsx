@@ -1,10 +1,7 @@
-import React, { useContext } from "react";
+import React from "react";
 import { GrDocumentText } from "react-icons/gr";
-import { BlockchainContext } from "../App.jsx";
 
-const ForumPost = ({ post, setIsOpen }) => {
-  const { setActivePostId } = useContext(BlockchainContext);
-
+const ForumPost = ({ post, setIsOpen, onReplyClick }) => {
   return (
     <div className="flex flex-row border-t-[#161f30] border-opacity-50 border-t-[0px] mb-[5px] mx-[2px] bg-accent-purple bg-opacity-40">
       <div className="flex items-start justify-center p-4 md:p-2">
@@ -25,7 +22,7 @@ const ForumPost = ({ post, setIsOpen }) => {
           <p>{post.content}</p>
           <button
             onClick={() => {
-              setActivePostId(post);
+              if (onReplyClick) onReplyClick(post);
               setIsOpen(true);
             }}
             className="bg-gray-300 hover:bg-gray-400 transition-all ease-in-out duration-200 text-black font-semibold text-md mt-4 lg:w-[110px] w-[55px] h-[31px] lg:h-[37px] p-[9px] rounded-md cursor-pointer">

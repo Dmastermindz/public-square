@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { useParams, useNavigate } from "react-router-dom";
 import CallAquariServer from "../api/callAquariServer.js";
-import { BlockchainContext } from "../App.jsx";
 
 const NewThreadOverlay = ({ isOpen, setIsOpen }) => {
-  const { user, setSelected, activeCategoryId } = useContext(BlockchainContext);
+  const { user } = usePrivy();
+  const { categoryId } = useParams();
+  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [quote, setQuote] = useState("");
@@ -13,14 +16,14 @@ const NewThreadOverlay = ({ isOpen, setIsOpen }) => {
   const addThread = async () => {
     try {
       const response = await CallAquariServer.post("/topics", {
-        forum_id: activeCategoryId,
-        user_id: user.id.slice(10),
+        forum_id: parseInt(categoryId),
+        user_id: user?.id?.slice(10) || "unknown",
         title: title,
       });
 
       const response2 = await CallAquariServer.post("/posts", {
         topic_id: response.data.data.topics.topic_id,
-        user_id: user.id.slice(10),
+        user_id: user?.id?.slice(10) || "unknown",
         content: body,
       });
 
@@ -35,18 +38,16 @@ const NewThreadOverlay = ({ isOpen, setIsOpen }) => {
       setTitle("");
       setBody("");
       setIsOpen(false);
+      // Refresh the page to show the new thread
+      window.location.reload();
     } catch (error) {
-      console.error("Error fetching posts:", error);
+      console.error("Error creating thread:", error);
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     addThread();
-    setSelected("Forum"); // These two lines are a Duct Tape Refresh Page Solution.
-    setTimeout(() => {
-      setSelected("Thread List");
-    }, 1000);
     // Handle form submission, e.g., send data to server
     console.log("Dialog Window Open?", isOpen);
     console.log("Title:", title);
@@ -59,7 +60,7 @@ const NewThreadOverlay = ({ isOpen, setIsOpen }) => {
   else
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="bg-background-secondary shadowzx w-[800px] h-[100svh] lg:h-[90svh] p-6 rounded-xl shadow-lg">
+        <div className="bg-secondary-bg shadowzx w-[800px] h-[100svh] lg:h-[90svh] p-6 rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold mb-4 text-text-primary">Start a New Thread</h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-4">

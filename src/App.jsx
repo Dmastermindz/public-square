@@ -1,190 +1,91 @@
-import React, { useState, useEffect, createContext } from "react";
+import React, { useState, createContext, useContext } from "react";
 import { Routes, Route } from "react-router-dom";
-import { ethers } from "ethers";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
-
-// Import Privy Provider
-import PrivyProviderComponent from "./providers/PrivyProvider.jsx";
-
-// Import Components
+import { PrivyProvider, usePrivy } from "@privy-io/react-auth";
 import Navbar from "./components/Navbar.jsx";
-import Sidebar from "./components/Sidebar.jsx";
-
-// Import Pages
+import ChatDrawer from "./components/ChatDrawer.jsx";
 import Forum from "./pages/Forum.jsx";
 import ThreadList from "./pages/ThreadList.jsx";
 import ThreadPage from "./pages/ThreadPage.jsx";
 import SignIn from "./pages/SignIn.jsx";
+import Announcement from "./components/AnnouncementBanner.jsx";
 
-// Create Contexts
-const BlockchainContext = createContext({});
-const PrivyContext = createContext({});
+// Create context for ChatDrawer state
+const ChatDrawerContext = createContext();
 
-export { BlockchainContext, PrivyContext };
+export const useChatDrawer = () => {
+  const context = useContext(ChatDrawerContext);
+  if (!context) {
+    throw new Error("useChatDrawer must be used within a ChatDrawerProvider");
+  }
+  return context;
+};
 
 function AppContent() {
-  // Privy state
-  const [embeddedWallet, setEmbeddedWallet] = useState("");
-  const [linkedWallet, setLinkedWallet] = useState("");
-  const [embeddedWalletAddress, setEmbeddedWalletAddress] = useState("");
-  const [linkedWalletAddress, setLinkedWalletAddress] = useState("");
-  const [walletBalance, setWalletBalance] = useState("");
-  const { wallets } = useWallets();
-  const { user, login, logout, ready, authenticated } = usePrivy();
+  const { authenticated } = usePrivy();
+  const [chatDrawerOpen, setChatDrawerOpen] = useState(true);
 
-  // Navigation state
-  const [selected, setSelected] = useState("Sign In");
-
-  // Forum state
-  const [activeCategoryId, setActiveCategoryId] = useState(1);
-  const [activeTopicId, setActiveTopicId] = useState(1);
-  const [activePostId, setActivePostId] = useState(null);
-  const [activeTopicTitle, setActiveTopicTitle] = useState("");
-
-  // Privy Setup
-  useEffect(() => {
-    if (!ready || !authenticated) {
-      return;
-    } else {
-      setUp();
-    }
-
-    async function setUp() {
-      const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === "privy");
-      const linkedWallet = wallets.find((wallet) => wallet.walletClientType === "metamask");
-
-      if (embeddedWallet) {
-        const provider = await embeddedWallet.getEthereumProvider();
-
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: `0x2105` }], // BASE Chain Mainnet
-        });
-
-        const ethProvider = new ethers.providers.Web3Provider(provider);
-        const signer = ethProvider.getSigner();
-        const walletBalance = await ethProvider.getBalance(embeddedWallet.address);
-        const ethStringAmount = ethers.utils.formatEther(walletBalance);
-
-        setWalletBalance(ethStringAmount);
-        setEmbeddedWallet(embeddedWallet);
-        setEmbeddedWalletAddress(embeddedWallet.address);
-
-        if (linkedWallet) {
-          setLinkedWallet(linkedWallet);
-          setLinkedWalletAddress(linkedWallet.address);
-        }
-
-        console.log("Privy Embedded Wallet Address:", embeddedWallet);
-        console.log("Privy Embedded Wallet Balance:", ethStringAmount);
-      }
-
-      if (!embeddedWallet && linkedWallet) {
-        const provider = await linkedWallet.getEthereumProvider();
-
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: `0x2105` }], // BASE Chain Mainnet
-        });
-
-        const ethProvider = new ethers.providers.Web3Provider(provider);
-        const signer = ethProvider.getSigner();
-        const walletBalance = await ethProvider.getBalance(linkedWallet.address);
-        const ethStringAmount = ethers.utils.formatEther(walletBalance);
-
-        setWalletBalance(ethStringAmount);
-        setLinkedWallet(linkedWallet);
-        setLinkedWalletAddress(linkedWallet.address);
-
-        console.log("Privy Linked Wallet:", linkedWallet);
-        console.log("Privy Linked Wallet Balance:", ethStringAmount);
-      }
-    }
-  }, [wallets, ready]);
-
-  // Auto-navigate on authentication change
-  useEffect(() => {
-    if (authenticated && selected === "Sign In") {
-      setSelected("Forum");
-    }
-    if (!authenticated && selected !== "Sign In") {
-      setSelected("Sign In");
-    }
-  }, [authenticated, selected]);
-
-  // Render content based on selected page
-  const renderContent = () => {
-    switch (selected) {
-      case "Forum":
-        return <Forum />;
-      case "Thread List":
-        return <ThreadList />;
-      case "Thread Page":
-        return <ThreadPage />;
-      default:
-        return <SignIn setSelected={setSelected} />;
-    }
+  // Calculate margin based on authentication and chat drawer state
+  const getMainContentStyle = () => {
+    if (!authenticated) return {};
+    return {
+      marginRight: chatDrawerOpen ? "480px" : "48px", // w-480 = 480px, w-12 = 48px
+    };
   };
 
   return (
-    <PrivyContext.Provider value={{ login, logout, ready, authenticated }}>
-      <BlockchainContext.Provider
-        value={{
-          user,
-          embeddedWalletAddress,
-          linkedWalletAddress,
-          walletBalance,
-          setSelected,
-          activeCategoryId,
-          setActiveCategoryId,
-          activeTopicId,
-          setActiveTopicId,
-          activePostId,
-          setActivePostId,
-          activeTopicTitle,
-          setActiveTopicTitle,
-        }}>
-        <div className="flex map-container full-height overflow-hidden">
-          {/* Navbar */}
-          <div className="w-full z-40 fixed">
-            <Navbar
-              selected={selected}
-              setSelected={setSelected}
-              authenticated={authenticated}
-              login={login}
-              logout={logout}
-              ready={ready}
-              embeddedWallet={embeddedWallet}
-              linkedWallet={linkedWallet}
-            />
-          </div>
-
-          {/* Sidebar */}
-          <div className="h-full flex-row">
-            <Sidebar
-              authenticated={authenticated}
-              selected={selected}
-              setSelected={setSelected}
-              embeddedWallet={embeddedWallet}
-              linkedWallet={linkedWallet}
-            />
-          </div>
-
-          {/* Main Content */}
-          <div className="flex-1 bg-primary-bg flex-grow flex flex-col map-container overflow-x-hidden mt-[60px] sm:mt-[80px]">{renderContent()}</div>
+    <ChatDrawerContext.Provider value={{ chatDrawerOpen, setChatDrawerOpen }}>
+      <div className="h-screen bg-primary-bg flex flex-col">
+        <Navbar />
+        <div className="flex flex-1 pt-[80px]">
+          {/* Main Content - Only this area should scroll */}
+          <main
+            className="flex-1 min-w-0 h-full overflow-hidden transition-all duration-300 ease-in-out"
+            style={getMainContentStyle()}>
+            <div className="h-full overflow-y-auto hide-scrollbar">
+              <Routes>
+                <Route
+                  path="/"
+                  element={<Forum />}
+                />
+                <Route
+                  path="/category/:categoryId"
+                  element={<ThreadList />}
+                />
+                <Route
+                  path="/thread/:threadId"
+                  element={<ThreadPage />}
+                />
+                <Route
+                  path="/signin"
+                  element={<SignIn />}
+                />
+              </Routes>
+            </div>
+          </main>
         </div>
-      </BlockchainContext.Provider>
-    </PrivyContext.Provider>
+
+        {/* Fixed Right Side Chat Drawer */}
+        {authenticated && <ChatDrawer authenticated={authenticated} />}
+      </div>
+    </ChatDrawerContext.Provider>
   );
 }
 
 function App() {
   return (
-    <div className="map-container">
-      <PrivyProviderComponent>
-        <AppContent />
-      </PrivyProviderComponent>
-    </div>
+    <PrivyProvider
+      appId={import.meta.env.VITE_PUBLIC_PRIVY_APP_ID}
+      config={{
+        appearance: {
+          theme: "dark",
+          accentColor: "#8B5CF6",
+        },
+        embeddedWallets: {
+          createOnLogin: "users-without-wallets",
+        },
+      }}>
+      <AppContent />
+    </PrivyProvider>
   );
 }
 

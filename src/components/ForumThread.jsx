@@ -1,10 +1,8 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { GrDocumentText } from "react-icons/gr";
-import { BlockchainContext } from "../App.jsx";
 import CallAquariServer from "../api/callAquariServer.js";
 
-const ForumThread = ({ setSelected, topic }) => {
-  const { activeTopicId, setActiveTopicId, setActiveTopicTitle } = useContext(BlockchainContext);
+const ForumThread = ({ navigate, topic }) => {
   const [postCount, setPostCount] = useState(null);
   const [viewCount, setViewCount] = useState(null);
   const [latestDate, setLatestDate] = useState(null);
@@ -89,11 +87,9 @@ const ForumThread = ({ setSelected, topic }) => {
     <div>
       <div
         onClick={() => {
-          setActiveTopicTitle(topic.title);
-          setActiveTopicId(topic.topic_id);
           setTimeout(() => {
             incrementViewCount(topic.topic_id);
-            setSelected("Thread Page");
+            navigate(`/thread/${topic.topic_id}`);
           }, 30);
         }}
         className="flex mb-[2px] mx-[2px] flex-row hover:bg-[#34394d] transition duration-300 ease-in-out cursor-pointer">

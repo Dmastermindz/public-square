@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import CallAquariServer from "../api/callAquariServer.js";
 import ForumThread from "../components/ForumThread.jsx";
 import NewThreadOverlay from "../components/NewThreadOverlay.jsx";
-import { BlockchainContext } from "../App.jsx";
 
 const ThreadList = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const { setSelected, activeCategoryId } = useContext(BlockchainContext);
+  const { categoryId } = useParams();
+  const navigate = useNavigate();
   const [forumTopics, setForumTopics] = useState([]);
   const [forums, setForums] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [categoryName, setCategoryName] = useState("");
 
   useEffect(() => {
     async function fetchData() {
@@ -61,7 +63,7 @@ const ThreadList = () => {
   }, []);
 
   const filteredTopics = forumTopics.filter((topic) => {
-    return topic.forum_id === activeCategoryId;
+    return topic.forum_id === parseInt(categoryId);
   });
 
   // Sort the filtered topics by latest_date
@@ -83,17 +85,20 @@ const ThreadList = () => {
   );
 
   return (
-    <div className="bg-black bg-opacity-[74%] p-4 md:px-12 md:py-7 min-h-full overflow-y-scroll">
+    <div className="bg-black bg-opacity-[74%] p-4 md:px-12 md:py-7">
       <NewThreadOverlay
         isOpen={isOpen}
         setIsOpen={setIsOpen}
       />
 
       <h1
-        onClick={() => setSelected("Forum")}
+        onClick={() => navigate("/")}
         className="text-base font-semibold cursor-pointer select-none tracking-wide text-text-primary hover:text-accent-purple transition-colors">
-        {"< Back to Categories"}
+        {"< Back to Community Home"}
       </h1>
+
+      {/* Category title */}
+      {categoryName && <h2 className="text-xl font-semibold text-text-primary mt-4 mb-2">{categoryName}</h2>}
 
       <button
         onClick={() => setIsOpen(true)}
@@ -104,11 +109,10 @@ const ThreadList = () => {
       <div className="flex mt-4 rounded-xl bg-[#1d1f31] bg-opacity-0 shadowz w-full min-h-full">
         <div className="flex flex-col w-full rounded-xl">
           <div className="flex flex-row rounded-xl">
-            <div className="flex rounded-t-xl flex-grow items-center justify-center bg-[#474c79] text-center text-sm lg:text-base px-4 bg-opacity-40 h-[40px] text-text-primary">Thread</div>
+            <div className="flex rounded-t-xl flex-grow items-center justify-center bg-[#474c79] text-center px-4 bg-opacity-40 h-[40px] text-text-primary">Topics</div>
             <div className="flex flex-row">
-              <div className="flex rounded-t-xl rounded-l-none flex-1 items-center justify-center bg-[#474c79] text-center text-xs lg:text-sm px-4 bg-opacity-40 h-[40px] w-[130px] md:w-[128px] lg:w-[0px] text-text-primary">Replies</div>
-              <div className="flex rounded-t-xl rounded-l-none flex-1 items-center justify-center bg-[#474c79] text-center text-xs lg:text-sm px-4 bg-opacity-40 h-[40px] w-[0px] lg:w-[125px] lg:pl-0 lg:pr-0 text-text-primary">Views</div>
-              <div className="flex rounded-t-xl rounded-l-none flex-1 items-center justify-center bg-[#474c79] text-center text-xs lg:text-sm px-4 bg-opacity-40 h-[40px] lg:whitespace-nowrap w-[30px] lg:w-full lg:pr-10 text-text-primary">Last Post</div>
+              <div className="flex rounded-t-xl rounded-l-none flex-1 items-center justify-center bg-[#474c79] text-center text-sm px-4 bg-opacity-40 h-[40px] w-[50px] lg:w-[125px] text-text-primary">Replies</div>
+              <div className="flex rounded-t-xl rounded-l-none flex-1 items-center justify-center bg-[#474c79] text-center text-sm px-4 bg-opacity-40 h-[40px] w-[125px] lg:w-full text-text-primary">Last Post</div>
             </div>
           </div>
 
@@ -122,7 +126,7 @@ const ThreadList = () => {
             sortedTopics.map((topic) => (
               <ForumThread
                 key={topic.topic_id}
-                setSelected={setSelected}
+                navigate={navigate}
                 topic={topic}
               />
             ))

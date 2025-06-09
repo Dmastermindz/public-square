@@ -1,10 +1,8 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Insignia from "../assets/AquariProfileLogo.png";
-import { BlockchainContext } from "../App.jsx";
 import CallAquariServer from "../api/callAquariServer.js";
 
-const ForumCategory = ({ setSelected, forumCategories, forumForums }) => {
-  const { setActiveCategoryId } = useContext(BlockchainContext);
+const ForumCategory = ({ navigate, forumCategories, forumForums }) => {
   const [threadCounts, setThreadCounts] = useState({});
   const [postCounts, setPostCounts] = useState({});
   const [isLoading, setIsLoading] = useState(true);
@@ -99,8 +97,7 @@ const ForumCategory = ({ setSelected, forumCategories, forumForums }) => {
                 className="flex my-[2px] mx-[2px] flex-row hover:bg-[#34394d] transition duration-300 ease-in-out cursor-pointer">
                 <div
                   onClick={() => {
-                    setActiveCategoryId(forum.forum_id);
-                    setSelected("Thread List");
+                    navigate(`/category/${forum.forum_id}`);
                   }}
                   className="flex py-1 flex-grow items-center justify-left bg-accent-purple text-center px-4 bg-opacity-40">
                   <img
