@@ -13,7 +13,8 @@ export default defineConfig({
     include: ["protobufjs/minimal"],
   },
   define: {
-    global: "globalThis",
+    // Removed global: "globalThis" - was causing API URL issues
+    // Modern XMTP SDK doesn't require this Node.js polyfill
   },
   server: {
     allowedHosts: "all",

@@ -284,3 +284,4 @@ For issues or questions:
 2. Verify your environment configuration
 3. Ensure all dependencies are installed correctly
 4. Check XMTP service status
+# public-square-backend
