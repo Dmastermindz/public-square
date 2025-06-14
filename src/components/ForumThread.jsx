@@ -104,11 +104,11 @@ const ForumThread = ({ navigate, topic }) => {
           </div>
         </div>
         <div className="flex flex-row">
-          <div className="flex py-1 items-center justify-center bg-accent-purple text-center px-2 md:px-4 bg-opacity-40 w-full lg:pr-7 text-xs lg:text-base pr-[30px] text-text-primary">{postCount !== null ? postCount : "Loading..."}</div>
-          <div className="flex py-1 items-center justify-center bg-accent-purple text-center px-2 md:px-4 bg-opacity-40 w-full text-xs lg:text-base pr-[40px] text-text-primary">{viewCount !== null ? viewCount : "Loading..."}</div>
-          <div className="flex flex-col py-1 rounded-t-none items-center justify-center bg-accent-purple text-center px-1 md:px-4 bg-opacity-40 lg:whitespace-nowrap w-full text-xs lg:text-base text-text-primary">
-            <p className="text-sm">{formatForumDate(latestDate)}</p>
-            <p className="text-xs">{formatForumTime(latestDate)}</p>
+          <div className="flex py-1 items-center justify-center bg-accent-purple text-center px-2 md:px-4 bg-opacity-40 w-full lg:pr-7 text-xs lg:text-base pr-[30px] text-text-primary">
+            {(() => {
+              const isNFT = Math.random() > 0.5;
+              return <span className={`px-3 py-1 rounded-full text-xs font-medium ${isNFT ? "bg-red-600" : "bg-green-600"}`}>{isNFT ? "NFT Required" : "Public"}</span>;
+            })()}
           </div>
         </div>
       </div>

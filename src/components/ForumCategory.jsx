@@ -112,17 +112,11 @@ const ForumCategory = ({ navigate, forumCategories, forumForums }) => {
                   </div>
                 </div>
                 <div className="flex flex-row">
-                  <div className="flex py-1 items-center justify-center bg-[#111827] text-center px-4 w-full lg:pr-7 text-white">{isLoading ? "..." : threadCounts[forum.forum_id] ?? 0}</div>
-                  <div className="flex py-1 items-center justify-center bg-[#111827] text-center px-4 w-full text-white">{isLoading ? "..." : postCounts[forum.forum_id] ?? 0}</div>
-                  <div className="flex flex-col py-1 rounded-t-none items-center justify-center bg-[#111827] text-center px-4 lg:whitespace-nowrap w-full text-white">
-                    {isLoading ? (
-                      "..."
-                    ) : (
-                      <>
-                        <p className="text-sm">{formatForumDate(latestDateData[forum.forum_id])}</p>
-                        <p className="text-xs">{formatForumTime(latestDateData[forum.forum_id])}</p>
-                      </>
-                    )}
+                  <div className="flex py-1 items-center justify-center bg-[#111827] text-center px-4 w-full lg:pr-7 text-white">
+                    {(() => {
+                      const isNFT = Math.random() > 0.5;
+                      return <span className={`px-3 py-1 rounded-full text-xs font-medium ${isNFT ? "bg-red-600" : "bg-green-600"}`}>{isNFT ? "NFT Required" : "Public"}</span>;
+                    })()}
                   </div>
                 </div>
               </div>
