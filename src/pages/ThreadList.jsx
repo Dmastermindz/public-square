@@ -102,7 +102,7 @@ const ThreadList = () => {
 
       <button
         onClick={() => setIsOpen(true)}
-        className="bg-gray-300 hover:bg-gray-400 transition-all ease-in-out duration-200 flex items-center justify-center text-black font-semibold text-md mt-4 w-[130px] h-[37px] p-[9px] rounded-md cursor-pointer">
+        className="bg-accent-purple hover:bg-accent-purple/80 transition-all ease-in-out duration-200 flex items-center justify-center text-white font-semibold text-md mt-4 w-[130px] h-[37px] p-[9px] rounded-md cursor-pointer">
         New Thread
       </button>
 
@@ -111,8 +111,7 @@ const ThreadList = () => {
           <div className="flex flex-row rounded-xl">
             <div className="flex rounded-t-xl flex-grow items-center justify-center bg-[#474c79] text-center px-4 bg-opacity-40 h-[40px] text-text-primary">Topics</div>
             <div className="flex flex-row">
-              <div className="flex rounded-t-xl rounded-l-none flex-1 items-center justify-center bg-[#474c79] text-center text-sm px-4 bg-opacity-40 h-[40px] w-[50px] lg:w-[125px] text-text-primary">Replies</div>
-              <div className="flex rounded-t-xl rounded-l-none flex-1 items-center justify-center bg-[#474c79] text-center text-sm px-4 bg-opacity-40 h-[40px] w-[125px] lg:w-full text-text-primary">Last Post</div>
+              <div className="flex rounded-t-xl rounded-l-none flex-1 items-center justify-center bg-[#474c79] text-center text-sm px-4 bg-opacity-40 h-[40px] w-[50px] lg:w-[125px] text-text-primary">Status</div>
             </div>
           </div>
 

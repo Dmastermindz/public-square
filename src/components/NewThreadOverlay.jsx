@@ -60,7 +60,7 @@ const NewThreadOverlay = ({ isOpen, setIsOpen }) => {
   else
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="bg-secondary-bg shadowzx w-[800px] h-[100svh] lg:h-[90svh] p-6 rounded-xl shadow-lg">
+        <div className="bg-[#1d1f31] shadowzx w-[800px] h-[100svh] lg:h-[90svh] p-6 rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold mb-4 text-text-primary">Start a New Thread</h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
@@ -98,12 +98,12 @@ const NewThreadOverlay = ({ isOpen, setIsOpen }) => {
                 onClick={() => {
                   setIsOpen(false);
                 }}
-                className="px-4 py-2 mr-2 rounded-md bg-gray-500 hover:bg-gray-600 text-white transition-colors">
+                className="px-4 py-2 mr-2 rounded-md bg-accent-purple bg-opacity-20 hover:bg-accent-purple bg-opacity-30 text-text-primary transition-colors">
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors">
+                className="px-4 py-2 rounded-md bg-accent-purple hover:bg-accent-purple/80 text-white transition-colors">
                 Submit
               </button>
             </div>
