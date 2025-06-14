@@ -34,9 +34,9 @@ function AppContent() {
 
   return (
     <ChatDrawerContext.Provider value={{ chatDrawerOpen, setChatDrawerOpen }}>
-      <div className="h-screen bg-primary-bg flex flex-col">
+      <div className="h-screen bg-gradient-to-br from-gray-800 via-gray-900 to-black flex flex-col">
         <Navbar />
-        <div className="flex flex-1 pt-[80px]">
+        <div className="flex flex-1 pt-[70px]">
           {/* Main Content - Only this area should scroll */}
           <main
             className="flex-1 min-w-0 h-full overflow-hidden transition-all duration-300 ease-in-out"
