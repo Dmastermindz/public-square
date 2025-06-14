@@ -11,7 +11,7 @@ const AnnouncementBanner = () => {
           className="text-lg font-bold mb-2">
           Announcement
         </h2>
-        <p className="font-normal text-xs leading-6 text-gray-700">Welcome to the Digicat HQ Message Board! If this is your first time visiting the forums, make sure to read the forum rules before posting. Also check out the FAQ. Note that you have to register an account before you are able to post.</p>
+        <p className="font-normal text-xs leading-6 text-gray-700">Welcome to the Public Square Message Board! If this is your first time visiting the forums, make sure to read the forum rules before posting. Also check out the FAQ. Note that you have to register an account before you are able to post.</p>
       </article>
     </section>
   );

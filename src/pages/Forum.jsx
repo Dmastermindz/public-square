@@ -4,6 +4,7 @@ import CallAquariServer from "../api/callAquariServer.js";
 import ForumCategory from "../components/ForumCategory.jsx";
 import Announcement from "../components/AnnouncementBanner.jsx";
 import InviteSection from "../components/InviteSection.jsx";
+import { Footer } from "../components/Footer.jsx";
 import { ArrowUpDown } from "lucide-react";
 
 const Forum = () => {
@@ -112,10 +113,10 @@ const Forum = () => {
   };
 
   return (
-    <div className="flex flex-col w-full min-h-screen bg-gradient-to-br from-gray-800 via-gray-900 to-black bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGRlZnM+CjxwYXR0ZXJuIGlkPSJncmlkIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiPgo8cGF0aCBkPSJNIDQwIDAgTCAwIDAgMCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMDUpIiBzdHJva2Utd2lkdGg9IjEiLz4KPC9wYXR0ZXJuPgo8L2RlZnM+CjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiIC8+Cjwvc3ZnPgo=')] bg-blend-color-dodge">
+    <div className="flex flex-col w-full min-h-screen bg-[url('/src/assets/4f4.png')] bg-repeat bg-[length:250px_250px] bg-[position:-50px_0]">
       {/* Main Content Container */}
       <div className="flex w-full px-4 md:px-8">
-        <div className="flex flex-col w-full gap-4 py-4">
+        <div className="flex flex-col w-full gap-4 py-4 mr-[569px]">
           {/* Header with Breadcrumb and View Toggle */}
           <div className="flex items-center gap-4 w-full">
             <div className="flex items-center gap-2.5 flex-1">
@@ -147,6 +148,9 @@ const Forum = () => {
 
           {/* Forum Content */}
           <div className="flex flex-col w-full">{renderContent()}</div>
+
+          {/* Footer */}
+          <Footer />
         </div>
       </div>
     </div>

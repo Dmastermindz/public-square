@@ -347,7 +347,12 @@ const ChatDrawer = ({ authenticated }) => {
       // Step 6: Successfully joined - set up the group
       setGlobalGroup(publicSquareGroup);
 
-      // Load all existing messages
+      // Step 7: Sync with group before loading messages
+      console.log("Syncing with group epoch...");
+      await publicSquareGroup.sync();
+      console.log("Group sync completed");
+
+      // Step 8: Load all existing messages
       console.log("Loading existing messages...");
       const globalMessages = await publicSquareGroup.messages();
       console.log(`📨 Loaded ${globalMessages.length} existing messages`);
@@ -357,7 +362,7 @@ const ChatDrawer = ({ authenticated }) => {
         global: globalMessages,
       }));
 
-      // Send join message for this session
+      // Step 9: Send join message for this session
       try {
         const userShort = `${address.slice(0, 6)}...${address.slice(-4)}`;
         await publicSquareGroup.send(`👋 ${userShort} has joined the Public Square!`);
@@ -390,22 +395,33 @@ const ChatDrawer = ({ authenticated }) => {
   // Load conversations (1:1 DMs)
   const loadConversations = async (client) => {
     try {
+      console.log("Loading conversations...");
       const convos = await client.conversations.list();
+      console.log("Found conversations:", convos);
+
       // Filter out group conversations, keep only DMs
       const dmConversations = convos.filter((convo) => convo.conversationType === "dm");
+      console.log("Filtered DM conversations:", dmConversations);
+
       setConversations(dmConversations);
 
       // Load messages for each DM conversation
       const messagePromises = dmConversations.map(async (convo) => {
+        console.log(`Loading messages for conversation ${convo.id}...`);
         const msgs = await convo.messages();
+        console.log(`Loaded ${msgs.length} messages for conversation ${convo.id}`);
         return { conversationId: convo.id, messages: msgs };
       });
 
       const conversationMessages = await Promise.all(messagePromises);
+      console.log("All conversation messages loaded:", conversationMessages);
+
       const messagesMap = {};
       conversationMessages.forEach(({ conversationId, messages }) => {
         messagesMap[conversationId] = messages;
       });
+
+      console.log("Final messages map:", messagesMap);
       setMessages((prev) => ({ ...prev, ...messagesMap }));
     } catch (error) {
       console.error("Failed to load conversations:", error);
@@ -488,37 +504,73 @@ const ChatDrawer = ({ authenticated }) => {
 
   // Stream new messages
   useEffect(() => {
-    if (!xmtpClient) return;
+    if (!xmtpClient) {
+      console.log("No XMTP client available for message streaming");
+      return;
+    }
 
+    console.log("Setting up message stream...");
     let stream;
     const startStreaming = async () => {
       try {
+        // Ensure global group is synced before starting stream
+        if (globalGroup) {
+          console.log("Syncing global group before starting stream...");
+          await globalGroup.sync();
+          console.log("Global group sync completed");
+        }
+
         stream = await xmtpClient.conversations.streamAllMessages();
+        console.log("Message stream established");
+
         for await (const message of stream) {
-          console.log("New message received:", message);
-          console.log("Message properties:", Object.keys(message));
-          console.log("Sender info:", {
-            senderAddress: message.senderAddress,
-            senderInboxId: message.senderInboxId,
-            sender: message.sender,
+          console.log("New message received:", {
+            id: message.id,
+            content: message.content,
+            sender: message.senderAddress,
+            conversationId: message.conversationId,
+            timestamp: message.sentAt,
           });
 
           // Check if it's from the global group
           if (globalGroup && message.conversationId === globalGroup.id) {
-            setMessages((prev) => ({
-              ...prev,
-              global: [...(prev.global || []), message],
-            }));
+            console.log("Message is from global group, updating messages...");
+            setMessages((prev) => {
+              const updatedMessages = {
+                ...prev,
+                global: [...(prev.global || []), message],
+              };
+              console.log("Updated global messages:", updatedMessages.global);
+              return updatedMessages;
+            });
           } else {
             // Regular DM message
-            setMessages((prev) => ({
-              ...prev,
-              [message.conversationId]: [...(prev[message.conversationId] || []), message],
-            }));
+            console.log("Message is from DM, updating messages...");
+            setMessages((prev) => {
+              const updatedMessages = {
+                ...prev,
+                [message.conversationId]: [...(prev[message.conversationId] || []), message],
+              };
+              console.log("Updated DM messages:", updatedMessages[message.conversationId]);
+              return updatedMessages;
+            });
           }
         }
       } catch (error) {
         console.error("Error streaming messages:", error);
+        // If we get an epoch mismatch error, try to resync
+        if (error.message?.includes("epoch")) {
+          console.log("Epoch mismatch detected, attempting to resync...");
+          try {
+            if (globalGroup) {
+              await globalGroup.sync();
+              console.log("Resync completed, restarting stream...");
+              startStreaming(); // Restart the stream
+            }
+          } catch (syncError) {
+            console.error("Failed to resync:", syncError);
+          }
+        }
       }
     };
 
@@ -526,6 +578,7 @@ const ChatDrawer = ({ authenticated }) => {
 
     return () => {
       if (stream) {
+        console.log("Cleaning up message stream");
         stream.return();
       }
     };
@@ -703,27 +756,25 @@ const ChatDrawer = ({ authenticated }) => {
   ];
 
   return (
-    <div className={`fixed right-0 top-0 h-screen bg-secondary-bg border-l border-border-color transition-all duration-300 ease-in-out z-30 ${chatDrawerOpen ? "w-480" : "w-12"}`}>
+    <div className={`fixed right-[17px] top-[80px] h-[calc(100vh-80px)] bg-[#1A2428] border-[5px] border-[#44DFE9] transition-all duration-300 ease-in-out z-20 ${chatDrawerOpen ? "w-[569px]" : "w-12"} rounded-[17px]`}>
       {/* Toggle Button */}
       <button
         onClick={() => setChatDrawerOpen(!chatDrawerOpen)}
-        className="absolute left-0 top-20 -translate-x-full bg-secondary-bg border border-border-color rounded-l-md p-2 hover:bg-accent-purple hover:bg-opacity-20 transition-colors z-10">
-        {chatDrawerOpen ? <ChevronRightIcon className="w-4 h-4 text-text-primary" /> : <ChevronLeftIcon className="w-4 h-4 text-text-primary" />}
+        className="absolute left-0 top-20 -translate-x-full bg-[#1A2428] border border-[#44DFE9] rounded-l-md p-2 hover:bg-[#44DFE9]/20 transition-colors z-20">
+        {chatDrawerOpen ? <ChevronRightIcon className="w-4 h-4 text-white" /> : <ChevronLeftIcon className="w-4 h-4 text-white" />}
       </button>
 
       {/* Content starts after navbar height */}
-      <div className="pt-[80px] h-full">
+      <div className="h-full">
         {/* Collapsed State */}
         {!chatDrawerOpen && (
-          <div className="flex flex-col items-center p-2 space-y-3 mt-4">
-            <ChatBubbleLeftRightIcon className="w-6 h-6 text-text-primary" />
-
+          <div className="flex flex-col items-center gap-4 p-2">
+            <ChatBubbleLeftRightIcon className="w-6 h-6 text-white" />
             {/* Global chat icon */}
             <div className="relative">
-              <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold">🌍</div>
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full"></div>
+              <div className="w-8 h-8 bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] rounded-full flex items-center justify-center text-[#7B81D6] font-bold">🌍</div>
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#FFDB1E] rounded-full"></div>
             </div>
-
             {/* Individual DM previews */}
             {conversations.slice(0, 2).map((conversation) => {
               const displayData = getConversationDisplayData(conversation);
@@ -737,7 +788,7 @@ const ChatDrawer = ({ authenticated }) => {
                     className="w-8 h-8 rounded-full"
                   />
                   {displayData.unreadCount > 0 && (
-                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#FF26DC] rounded-full flex items-center justify-center">
                       <span className="text-xs text-white">{displayData.unreadCount}</span>
                     </div>
                   )}
@@ -753,9 +804,9 @@ const ChatDrawer = ({ authenticated }) => {
             {!selectedChat ? (
               // Chat List View
               <>
-                <div className="p-4 border-b border-border-color">
-                  <h3 className="text-lg font-semibold text-text-primary flex items-center">
-                    <ChatBubbleLeftRightIcon className="w-5 h-5 mr-2" />
+                <div className="p-4 border-b border-[#ABABF9]">
+                  <h3 className="text-4xl font-bold text-white flex items-center">
+                    <ChatBubbleLeftRightIcon className="w-8 h-8 mr-2" />
                     Public Square Chat
                   </h3>
 
@@ -764,7 +815,7 @@ const ChatDrawer = ({ authenticated }) => {
                     {(() => {
                       const statusDisplay = getConnectionStatusDisplay();
                       return (
-                        <p className={`text-xs ${statusDisplay.color} flex items-center`}>
+                        <p className={`text-base ${statusDisplay.color} flex items-center`}>
                           <span className="mr-1">{statusDisplay.icon}</span>
                           {statusDisplay.text}
                         </p>
@@ -772,13 +823,13 @@ const ChatDrawer = ({ authenticated }) => {
                     })()}
 
                     {/* Additional status info */}
-                    {isInitializing && <p className="text-xs text-blue-400">🔄 Initializing XMTP client...</p>}
-                    {isJoiningGlobal && <p className="text-xs text-yellow-400">🌍 Joining Public Square...</p>}
-                    {globalGroup && <p className="text-xs text-green-400">✅ Global chat ready</p>}
+                    {isInitializing && <p className="text-base text-[#27BBFB]">🔄 Initializing XMTP client...</p>}
+                    {isJoiningGlobal && <p className="text-base text-[#FFDB1E]">🌍 Joining Public Square...</p>}
+                    {globalGroup && <p className="text-base text-[#FF26DC]">✅ Global chat ready</p>}
 
                     {/* Development Debug Info */}
                     {import.meta.env.MODE === "development" && (
-                      <div className="bg-gray-100 p-3 text-xs text-gray-600 border rounded mb-4">
+                      <div className="bg-[rgba(255,255,255,0.11)] p-3 text-base text-white border-2 border-[#ABABF9] rounded-2xl mb-4">
                         <div>
                           <strong>Debug Info:</strong>
                         </div>
@@ -793,12 +844,12 @@ const ChatDrawer = ({ authenticated }) => {
                             <div className="mt-2 space-x-2">
                               <button
                                 onClick={shareGroupId}
-                                className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600">
+                                className="px-6 py-4 bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] text-[#7B81D6] text-base font-semibold rounded-xl hover:opacity-90">
                                 📋 Copy Group ID
                               </button>
                               <button
                                 onClick={joinSharedGroup}
-                                className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600">
+                                className="px-6 py-4 border-2 border-[#ECECFF] bg-transparent text-base font-semibold bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] bg-clip-text text-transparent rounded-xl">
                                 🔗 Join Group ID
                               </button>
                             </div>
@@ -811,14 +862,15 @@ const ChatDrawer = ({ authenticated }) => {
                     {(connectionStatus === "error" || (connectionStatus === "connecting" && retryCount === 0)) && (
                       <button
                         onClick={retryConnection}
-                        className="mt-2 px-3 py-1 bg-accent-purple text-white rounded text-xs hover:bg-accent-dark transition-colors">
+                        className="mt-2 px-6 py-4 bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] text-[#7B81D6] text-base font-semibold rounded-xl hover:opacity-90">
                         {connectionStatus === "error" ? "Retry Connection" : "Reset & Retry"}
                       </button>
                     )}
                   </div>
                 </div>
+
                 <div className="flex-1 overflow-y-auto hide-scrollbar">
-                  {allChats.length === 0 && !isInitializing ? (
+                  {!globalGroup && !isInitializing ? (
                     <div className="p-4 text-center text-text-secondary">
                       <p>Connecting to Public Square...</p>
                       <p className="text-xs mt-2">The global chatroom is loading!</p>
@@ -874,20 +926,20 @@ const ChatDrawer = ({ authenticated }) => {
             ) : (
               // Individual Chat View
               <div className="flex flex-col h-full w-full">
-                <div className="p-4 border-b border-border-color flex items-center">
+                <div className="p-4 border-b border-[#ABABF9] flex items-center">
                   <button
                     onClick={handleBackToList}
-                    className="mr-3 p-1 hover:bg-accent-purple hover:bg-opacity-20 rounded">
-                    <ChevronLeftIcon className="w-4 h-4 text-text-primary" />
+                    className="mr-3 p-2 hover:bg-[rgba(255,255,255,0.11)] rounded-xl">
+                    <ChevronLeftIcon className="w-6 h-6 text-white" />
                   </button>
                   <div className="flex items-center">
                     {selectedChat === "global" ? (
                       <>
-                        <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold mr-3">🌍</div>
+                        <div className="w-10 h-10 bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] rounded-full flex items-center justify-center text-[#7B81D6] font-bold mr-3">🌍</div>
                         <div>
-                          <h4 className="text-sm font-medium text-purple-400">{GLOBAL_CHAT_NAME}</h4>
-                          <span className="text-xs text-blue-400 flex items-center">
-                            <UserGroupIcon className="w-3 h-3 mr-1" />
+                          <h4 className="text-xl font-semibold text-[#ECECFF]">{GLOBAL_CHAT_NAME}</h4>
+                          <span className="text-base text-[#ABABF9] flex items-center">
+                            <UserGroupIcon className="w-4 h-4 mr-1" />
                             Global Community Chat
                           </span>
                         </div>
@@ -901,13 +953,13 @@ const ChatDrawer = ({ authenticated }) => {
                             <img
                               src={displayData.avatar}
                               alt={displayData.name}
-                              className="w-8 h-8 rounded-full mr-3"
+                              className="w-10 h-10 rounded-full mr-3"
                             />
                             <div>
-                              <h4 className="text-sm font-medium text-text-primary">
+                              <h4 className="text-xl font-semibold text-white">
                                 {displayData.name.slice(0, 6)}...{displayData.name.slice(-4)}
                               </h4>
-                              <span className="text-xs text-blue-400">Direct Message</span>
+                              <span className="text-base text-[#ABABF9]">Direct Message</span>
                             </div>
                           </>
                         ) : null;
@@ -917,21 +969,17 @@ const ChatDrawer = ({ authenticated }) => {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-3">
+                <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-4">
                   {((selectedChat === "global" ? messages.global : messages[selectedChat]) || []).map((message, index) => {
-                    // XMTP v3 uses senderInboxId instead of senderAddress
                     const messageSender = message.senderInboxId || message.senderAddress || message.sender;
                     const isMyMessage = messageSender === address || message.senderInboxId === user?.id;
                     const senderShort = messageSender ? `${messageSender.slice(0, 6)}...${messageSender.slice(-4)}` : "Unknown";
 
-                    // Handle different content types
                     const renderContent = () => {
                       if (typeof message.content === "string") {
                         return message.content;
                       } else if (typeof message.content === "object" && message.content !== null) {
-                        // Handle XMTP group metadata messages
                         if (message.content.initiatedByInboxId || message.content.addedInboxes || message.content.removedInboxes) {
-                          // This is a group membership change message
                           const { initiatedByInboxId, addedInboxes, removedInboxes, metadataFieldChanges } = message.content;
 
                           if (addedInboxes && addedInboxes.length > 0) {
@@ -944,7 +992,6 @@ const ChatDrawer = ({ authenticated }) => {
                             return `🔄 Group updated`;
                           }
                         } else {
-                          // For other object types, try to display them safely
                           return `📎 ${message.contentType || "Media message"}`;
                         }
                       } else {
@@ -955,11 +1002,11 @@ const ChatDrawer = ({ authenticated }) => {
                     return (
                       <div
                         key={`${message.id || index}`}
-                        className={`flex ${isMyMessage ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-xs px-4 py-2 rounded-lg ${isMyMessage ? "bg-accent-purple text-white" : "bg-accent-purple bg-opacity-20 text-text-primary"}`}>
-                          {selectedChat === "global" && !isMyMessage && <p className="text-xs opacity-70 mb-1">{senderShort}</p>}
-                          <p className="text-sm">{renderContent()}</p>
-                          <span className="text-xs opacity-70 mt-1 block">{new Date(message.sentAt || message.timestamp || Date.now()).toLocaleTimeString()}</span>
+                        className={`flex ${isMyMessage ? "justify-end" : "justify-start"} mb-4`}>
+                        <div className={`max-w-xs px-6 py-4 rounded-2xl ${isMyMessage ? "bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] text-[#7B81D6] rounded-tr-none" : "bg-[#2A3438] text-white rounded-tl-none"}`}>
+                          {selectedChat === "global" && !isMyMessage && <p className="text-sm text-[#ABABF9] mb-1">{senderShort}</p>}
+                          <p className="text-base">{renderContent()}</p>
+                          <span className="text-xs text-[#ABABF9] mt-1 block text-right">{new Date(message.sentAt || message.timestamp || Date.now()).toLocaleTimeString()}</span>
                         </div>
                       </div>
                     );
@@ -967,7 +1014,7 @@ const ChatDrawer = ({ authenticated }) => {
                 </div>
 
                 {/* Message Input */}
-                <div className="p-4 border-t border-border-color">
+                <div className="p-4 border-t border-[#ABABF9]">
                   <div className="flex space-x-2">
                     <input
                       type="text"
@@ -976,19 +1023,19 @@ const ChatDrawer = ({ authenticated }) => {
                       onKeyPress={(e) => e.key === "Enter" && !isSendingMessage && handleSendMessage()}
                       placeholder={selectedChat === "global" ? "Message the Public Square..." : "Type a message..."}
                       disabled={isSendingMessage || connectionStatus !== "connected"}
-                      className="flex-1 px-3 py-2 bg-accent-purple bg-opacity-20 border border-accent-purple border-opacity-30 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent-purple text-sm disabled:opacity-50"
+                      className="flex-1 px-6 py-4 bg-[rgba(255,255,255,0.11)] border-2 border-[#ABABF9] rounded-xl text-white placeholder-[#ABABF9] focus:outline-none focus:border-[#ECECFF] text-base disabled:opacity-50"
                     />
                     <button
                       onClick={handleSendMessage}
                       disabled={isSendingMessage || !newMessage.trim() || connectionStatus !== "connected"}
-                      className="px-3 py-2 bg-accent-purple text-white rounded-lg hover:bg-accent-dark transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                      className="px-6 py-4 bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] text-[#7B81D6] text-base font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
                       {isSendingMessage ? "Sending..." : "Send"}
                     </button>
                   </div>
 
                   {/* Connection status in chat input area */}
                   {connectionStatus !== "connected" && (
-                    <div className="mt-2 text-xs text-center">
+                    <div className="mt-2 text-base text-center">
                       {(() => {
                         const statusDisplay = getConnectionStatusDisplay();
                         return (

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Insignia from "../assets/AquariProfileLogo.png";
+import Eye from "../assets/eye.png";
 import CallAquariServer from "../api/callAquariServer.js";
 
 const ForumCategory = ({ navigate, forumCategories, forumForums }) => {
@@ -88,32 +89,32 @@ const ForumCategory = ({ navigate, forumCategories, forumForums }) => {
     <div>
       {forumCategories.map((category) => (
         <React.Fragment key={category.category_id}>
-          <div className="flex pl-8 py-2 mt-[2px] mx-[2px] items-center tracking-wide font-medium bg-accent-purple bg-opacity-40 text-text-primary">{category.name || "Category is Undefined"}</div>
+          <div className="flex pl-8 py-2 mt-[2px] mx-[2px] items-center tracking-wide font-medium bg-gradient-to-r from-[#264EA4] via-[#4158ED] via-[#297FE8] via-[#2246BC] to-[#181862] text-text-primary">{category.name || "Category is Undefined"}</div>
           {forumForums
             .filter((forum) => forum.category_id === category.category_id)
             .map((forum) => (
               <div
                 key={forum.forum_id}
-                className="flex my-[2px] mx-[2px] flex-row hover:bg-[#34394d] transition duration-300 ease-in-out cursor-pointer">
+                className="flex flex-row hover:bg-[#34394d] transition duration-300 ease-in-out cursor-pointer border border-[#6B7280]">
                 <div
                   onClick={() => {
                     navigate(`/category/${forum.forum_id}`);
                   }}
-                  className="flex py-1 flex-grow items-center justify-left bg-accent-purple text-center px-4 bg-opacity-40">
+                  className="flex py-1 flex-grow items-center justify-left bg-[#111827] text-center px-4">
                   <img
                     className="rounded-full hidden sm:flex opacity-[95%] h-[44px] pr-4"
-                    src={Insignia}
-                    alt="Insignia"
+                    src={Eye}
+                    alt="Eye"
                   />
                   <div className="flex flex-col my-1">
-                    <h1 className="text-left font-light text-text-primary">{forum.name || "Forum is Undefined"}</h1>
-                    <p className="text-left max-w-[600px] text-xs font-light text-text-secondary">{forum.description || "Description is Undefined"}</p>
+                    <h1 className="text-left font-light text-white">{forum.name || "Forum is Undefined"}</h1>
+                    <p className="text-left max-w-[600px] text-xs font-light text-white/80">{forum.description || "Description is Undefined"}</p>
                   </div>
                 </div>
                 <div className="flex flex-row">
-                  <div className="flex py-1 items-center justify-center bg-accent-purple text-center px-4 bg-opacity-40 w-full lg:pr-7 text-text-primary">{isLoading ? "..." : threadCounts[forum.forum_id] ?? 0}</div>
-                  <div className="flex py-1 items-center justify-center bg-accent-purple text-center px-4 bg-opacity-40 w-full text-text-primary">{isLoading ? "..." : postCounts[forum.forum_id] ?? 0}</div>
-                  <div className="flex flex-col py-1 rounded-t-none items-center justify-center bg-accent-purple text-center px-4 bg-opacity-40 lg:whitespace-nowrap w-full text-text-primary">
+                  <div className="flex py-1 items-center justify-center bg-[#111827] text-center px-4 w-full lg:pr-7 text-white">{isLoading ? "..." : threadCounts[forum.forum_id] ?? 0}</div>
+                  <div className="flex py-1 items-center justify-center bg-[#111827] text-center px-4 w-full text-white">{isLoading ? "..." : postCounts[forum.forum_id] ?? 0}</div>
+                  <div className="flex flex-col py-1 rounded-t-none items-center justify-center bg-[#111827] text-center px-4 lg:whitespace-nowrap w-full text-white">
                     {isLoading ? (
                       "..."
                     ) : (
