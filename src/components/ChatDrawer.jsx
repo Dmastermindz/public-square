@@ -5,6 +5,7 @@ import { Client } from "@xmtp/browser-sdk";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import CallAquariServer from "../api/callAquariServer.js";
 import CallXMTPServer from "../api/callXMTPServer.js";
+import { AIPluginCard } from "./AIPluginCard";
 
 const GLOBAL_CHAT_NAME = "🌍 Public Square";
 const GLOBAL_CHAT_DESCRIPTION = "The global chatroom for everyone on the platform - where humans and agents coexist!";
@@ -27,6 +28,8 @@ const ChatDrawer = ({ authenticated }) => {
   const [connectionError, setConnectionError] = useState(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const { user } = usePrivy();
   const { wallets } = useWallets();
 
@@ -306,13 +309,32 @@ const ChatDrawer = ({ authenticated }) => {
           });
           console.log("📤 Invitation request sent to backend");
 
-          // Step 4: Wait a moment for invitation to be processed
+          // Step 4: Wait and retry multiple times for the invitation
           console.log("⏳ Waiting for invitation to be processed...");
-          await new Promise((resolve) => setTimeout(resolve, 3000)); // Wait 3 seconds
+          const maxRetries = 5;
+          const retryDelay = 2000; // 2 seconds between retries
 
-          // Step 5: Check again for the group
-          const updatedGroups = await client.conversations.list();
-          publicSquareGroup = updatedGroups.find((group) => group.id === BACKEND_GROUP_ID);
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            console.log(`🔄 Checking for invitation (attempt ${attempt}/${maxRetries})...`);
+
+            // Wait before checking
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+
+            // Check for the group
+            const updatedGroups = await client.conversations.list();
+            publicSquareGroup = updatedGroups.find((group) => group.id === BACKEND_GROUP_ID);
+
+            if (publicSquareGroup) {
+              console.log(`✅ Successfully found group on attempt ${attempt}!`);
+              break;
+            }
+
+            if (attempt === maxRetries) {
+              throw new Error("Invitation not received after multiple attempts. Please try again.");
+            }
+
+            console.log(`⏳ No group found yet, waiting ${retryDelay}ms before next attempt...`);
+          }
 
           if (!publicSquareGroup) {
             throw new Error("Invitation not received yet. Please try again in a moment.");
@@ -344,15 +366,15 @@ const ChatDrawer = ({ authenticated }) => {
         }
       }
 
-      // Step 6: Successfully joined - set up the group
+      // Step 5: Successfully joined - set up the group
       setGlobalGroup(publicSquareGroup);
 
-      // Step 7: Sync with group before loading messages
+      // Step 6: Sync with group before loading messages
       console.log("Syncing with group epoch...");
       await publicSquareGroup.sync();
       console.log("Group sync completed");
 
-      // Step 8: Load all existing messages
+      // Step 7: Load all existing messages
       console.log("Loading existing messages...");
       const globalMessages = await publicSquareGroup.messages();
       console.log(`📨 Loaded ${globalMessages.length} existing messages`);
@@ -362,7 +384,7 @@ const ChatDrawer = ({ authenticated }) => {
         global: globalMessages,
       }));
 
-      // Step 9: Send join message for this session
+      // Step 8: Send join message for this session
       try {
         const userShort = `${address.slice(0, 6)}...${address.slice(-4)}`;
         await publicSquareGroup.send(`👋 ${userShort} has joined the Public Square!`);
@@ -736,6 +758,11 @@ const ChatDrawer = ({ authenticated }) => {
     }
   };
 
+  const handlePluginClick = (pluginName) => {
+    setErrorMessage(`Error: Failed to Add Plugin - AgentKit integration error. The ${pluginName} requires additional permissions to be added to your chatroom. Please try again later.`);
+    setShowErrorModal(true);
+  };
+
   if (!authenticated) {
     return null;
   }
@@ -815,7 +842,7 @@ const ChatDrawer = ({ authenticated }) => {
                     {(() => {
                       const statusDisplay = getConnectionStatusDisplay();
                       return (
-                        <p className={`text-base ${statusDisplay.color} flex items-center`}>
+                        <p className={`text-xs ${statusDisplay.color} flex items-center`}>
                           <span className="mr-1">{statusDisplay.icon}</span>
                           {statusDisplay.text}
                         </p>
@@ -823,46 +850,15 @@ const ChatDrawer = ({ authenticated }) => {
                     })()}
 
                     {/* Additional status info */}
-                    {isInitializing && <p className="text-base text-[#27BBFB]">🔄 Initializing XMTP client...</p>}
-                    {isJoiningGlobal && <p className="text-base text-[#FFDB1E]">🌍 Joining Public Square...</p>}
-                    {globalGroup && <p className="text-base text-[#FF26DC]">✅ Global chat ready</p>}
-
-                    {/* Development Debug Info */}
-                    {import.meta.env.MODE === "development" && (
-                      <div className="bg-[rgba(255,255,255,0.11)] p-3 text-base text-white border-2 border-[#ABABF9] rounded-2xl mb-4">
-                        <div>
-                          <strong>Debug Info:</strong>
-                        </div>
-                        <div>Wallet: {address}</div>
-                        <div>Conversations: {Object.keys(messages).length}</div>
-                        <div>Global Group: {globalGroup ? "Connected" : "Not connected"}</div>
-                        <div>Retry Count: {retryCount}</div>
-                        {globalGroup && (
-                          <>
-                            <div>Group ID: {globalGroup.id}</div>
-                            <div>Members: {globalGroup.members?.length || "unknown"}</div>
-                            <div className="mt-2 space-x-2">
-                              <button
-                                onClick={shareGroupId}
-                                className="px-6 py-4 bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] text-[#7B81D6] text-base font-semibold rounded-xl hover:opacity-90">
-                                📋 Copy Group ID
-                              </button>
-                              <button
-                                onClick={joinSharedGroup}
-                                className="px-6 py-4 border-2 border-[#ECECFF] bg-transparent text-base font-semibold bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] bg-clip-text text-transparent rounded-xl">
-                                🔗 Join Group ID
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
+                    {isInitializing && <p className="text-xs text-blue-400">🔄 Initializing XMTP client...</p>}
+                    {isJoiningGlobal && <p className="text-xs text-yellow-400">🌍 Joining Public Square...</p>}
+                    {globalGroup && <p className="text-xs text-green-400">✅ Global chat ready</p>}
 
                     {/* Retry button for failed connections */}
                     {(connectionStatus === "error" || (connectionStatus === "connecting" && retryCount === 0)) && (
                       <button
                         onClick={retryConnection}
-                        className="mt-2 px-6 py-4 bg-gradient-to-b from-[#ECECFF] to-[#E1E1FE] text-[#7B81D6] text-base font-semibold rounded-xl hover:opacity-90">
+                        className="mt-2 px-3 py-1 bg-accent-purple text-white rounded text-xs hover:bg-accent-dark transition-colors">
                         {connectionStatus === "error" ? "Retry Connection" : "Reset & Retry"}
                       </button>
                     )}
@@ -876,50 +872,102 @@ const ChatDrawer = ({ authenticated }) => {
                       <p className="text-xs mt-2">The global chatroom is loading!</p>
                     </div>
                   ) : (
-                    allChats.map((chat) => {
-                      const { type, data } = chat;
-                      const isGlobal = type === "global";
+                    <div className="flex flex-col h-full">
+                      {/* Global Chat Section */}
+                      <div className="p-4 border-b border-border-color">
+                        <h3 className="text-neutral-200 text-xl font-bold mb-2.5">Global Chat</h3>
+                        {allChats
+                          .filter((chat) => chat.type === "global")
+                          .map((chat) => {
+                            const { data } = chat;
+                            return (
+                              <div
+                                key={data.id}
+                                onClick={() => handleChatSelect(data.id)}
+                                className="flex items-center p-3 hover:bg-accent-purple hover:bg-opacity-20 cursor-pointer border-b border-border-color border-opacity-30 bg-gradient-to-r from-purple-500/10 to-blue-500/10">
+                                <div className="relative">
+                                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold">🌍</div>
+                                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full"></div>
+                                </div>
+                                <div className="ml-3 flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                      <p className="text-sm font-medium truncate text-purple-400">{data.name}</p>
+                                      <span className="text-xs text-text-secondary flex items-center">
+                                        <UserGroupIcon className="w-3 h-3 mr-1" />
+                                        {data.memberCount}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs text-text-secondary">{data.timestamp}</span>
+                                  </div>
+                                  <p className="text-sm text-text-secondary truncate">{data.lastMessage}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
 
-                      return (
-                        <div
-                          key={data.id}
-                          onClick={() => handleChatSelect(data.id)}
-                          className={`flex items-center p-3 hover:bg-accent-purple hover:bg-opacity-20 cursor-pointer border-b border-border-color border-opacity-30 ${isGlobal ? "bg-gradient-to-r from-purple-500/10 to-blue-500/10" : ""}`}>
-                          <div className="relative">
-                            {isGlobal ? (
-                              <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold">🌍</div>
-                            ) : (
-                              <img
-                                src={data.avatar}
-                                alt={data.name}
-                                className="w-10 h-10 rounded-full"
-                              />
-                            )}
-                            {isGlobal && <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full"></div>}
-                          </div>
-                          <div className="ml-3 flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <p className={`text-sm font-medium truncate ${isGlobal ? "text-purple-400" : "text-text-primary"}`}>{isGlobal ? data.name : `${data.name.slice(0, 6)}...${data.name.slice(-4)}`}</p>
-                                {isGlobal && (
-                                  <span className="text-xs text-text-secondary flex items-center">
-                                    <UserGroupIcon className="w-3 h-3 mr-1" />
-                                    {data.memberCount}
-                                  </span>
+                      {/* AI Plugins Section */}
+                      <div className="p-4">
+                        <h3 className="text-neutral-200 text-xl font-bold mb-2.5">Add Plugins To Your Chatroom</h3>
+
+                        <AIPluginCard
+                          title="Welcome AI Agent"
+                          iconSrc="https://cdn.builder.io/api/v1/image/assets/6f2aebc9bb734d979c603aa774a20c1a/bdbfcafa08ae36bc887736bfa7deee6945813dbc?placeholderIfAbsent=true"
+                          onClick={() => handlePluginClick("Welcome AI Agent")}
+                        />
+
+                        <AIPluginCard
+                          title="Trivia AI Plugin"
+                          iconSrc="https://cdn.builder.io/api/v1/image/assets/6f2aebc9bb734d979c603aa774a20c1a/8cb73ddf3f6e760ccb0e7436e9e81936d9531af2?placeholderIfAbsent=true"
+                          onClick={() => handlePluginClick("Trivia AI Plugin")}
+                        />
+
+                        <AIPluginCard
+                          title="Faucet AI Agent Plugin"
+                          iconSrc="https://cdn.builder.io/api/v1/image/assets/6f2aebc9bb734d979c603aa774a20c1a/50642975c151b0f85f10cf07ba4b421979a2880b?placeholderIfAbsent=true"
+                          onClick={() => handlePluginClick("Faucet AI Agent Plugin")}
+                        />
+                      </div>
+
+                      {/* Direct Messages Section */}
+                      <div className="p-4 border-t border-border-color">
+                        <h3 className="text-neutral-200 text-xl font-bold mb-2.5">Direct Messages</h3>
+                        {allChats
+                          .filter((chat) => chat.type === "dm")
+                          .map((chat) => {
+                            const { data } = chat;
+                            return (
+                              <div
+                                key={data.id}
+                                onClick={() => handleChatSelect(data.id)}
+                                className="flex items-center p-3 hover:bg-accent-purple hover:bg-opacity-20 cursor-pointer border-b border-border-color border-opacity-30">
+                                <div className="relative">
+                                  <img
+                                    src={data.avatar}
+                                    alt={data.name}
+                                    className="w-10 h-10 rounded-full"
+                                  />
+                                </div>
+                                <div className="ml-3 flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                      <p className="text-sm font-medium truncate text-text-primary">{`${data.name.slice(0, 6)}...${data.name.slice(-4)}`}</p>
+                                    </div>
+                                    <span className="text-xs text-text-secondary">{data.timestamp}</span>
+                                  </div>
+                                  <p className="text-sm text-text-secondary truncate">{data.lastMessage}</p>
+                                </div>
+                                {data.unreadCount > 0 && (
+                                  <div className="ml-2 w-5 h-5 bg-accent-purple rounded-full flex items-center justify-center">
+                                    <span className="text-xs text-white">{data.unreadCount}</span>
+                                  </div>
                                 )}
                               </div>
-                              <span className="text-xs text-text-secondary">{data.timestamp}</span>
-                            </div>
-                            <p className="text-sm text-text-secondary truncate">{data.lastMessage}</p>
-                          </div>
-                          {data.unreadCount > 0 && (
-                            <div className="ml-2 w-5 h-5 bg-accent-purple rounded-full flex items-center justify-center">
-                              <span className="text-xs text-white">{data.unreadCount}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
+                            );
+                          })}
+                      </div>
+                    </div>
                   )}
                 </div>
               </>
@@ -1052,6 +1100,20 @@ const ChatDrawer = ({ authenticated }) => {
           </div>
         )}
       </div>
+
+      {/* Error Modal */}
+      {showErrorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-secondary-bg border-2 border-[#ABABF9] rounded-2xl p-6 max-w-md w-full mx-4">
+            <div className="text-red-400 text-lg font-semibold mb-4">{errorMessage}</div>
+            <button
+              onClick={() => setShowErrorModal(false)}
+              className="w-full px-4 py-2 bg-accent-purple text-white rounded-lg hover:bg-accent-dark transition-colors">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

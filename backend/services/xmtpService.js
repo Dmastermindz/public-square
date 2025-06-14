@@ -325,7 +325,6 @@ export async function inviteUserToGlobalGroup(userAddress) {
     console.log(`✅ User has XMTP identity`);
 
     // Step 2: Get user's inbox ID from their address
-    // In XMTP v3, group membership uses inbox IDs, not Ethereum addresses
     console.log(`🔄 Getting inbox ID for address: ${userAddress}`);
 
     let userInboxId;
@@ -339,7 +338,6 @@ export async function inviteUserToGlobalGroup(userAddress) {
       console.log("🔍 Using identity format:", JSON.stringify(userIdentity, null, 2));
 
       // Try different approaches to get inbox ID
-      // Approach 1: Use the standalone getInboxIdForIdentifier function
       try {
         console.log("🔍 Using standalone getInboxIdForIdentifier function...");
         const xmtpEnv = process.env.XMTP_ENV || "production";
@@ -348,7 +346,6 @@ export async function inviteUserToGlobalGroup(userAddress) {
       } catch (standaloneError) {
         console.log("⚠️ Standalone function failed, trying client method...");
 
-        // Approach 2: Use client instance method
         if (typeof xmtpClient.getInboxIdByIdentifier === "function") {
           console.log("🔍 Using client.getInboxIdByIdentifier method...");
           userInboxId = await xmtpClient.getInboxIdByIdentifier(userIdentity);
@@ -376,15 +373,37 @@ export async function inviteUserToGlobalGroup(userAddress) {
 
     let addSuccess = false;
     retryCount = 0;
+    const addMaxRetries = 5; // Increased from 3 to 5
+    const addRetryDelay = 3000; // Increased from 2000 to 3000
 
-    while (retryCount < maxRetries && !addSuccess) {
+    while (retryCount < addMaxRetries && !addSuccess) {
       try {
-        console.log(`🔄 Attempting to add member (attempt ${retryCount + 1}/${maxRetries})...`);
+        console.log(`🔄 Attempting to add member (attempt ${retryCount + 1}/${addMaxRetries})...`);
+
+        // Sync group before adding member
+        await globalGroup.sync();
+        console.log("✅ Group synced before adding member");
 
         // Use inbox ID for adding to group (XMTP v3 requirement)
         await globalGroup.addMembers([userInboxId]);
         addSuccess = true;
         console.log(`✅ Successfully added member with inbox ID: ${userInboxId}`);
+
+        // Wait for changes to propagate
+        console.log("⏳ Waiting for changes to propagate...");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Verify the addition by syncing and checking members
+        await globalGroup.sync();
+        const members = await globalGroup.members();
+        const isMember = members.some((member) => member.inboxId.toLowerCase() === userInboxId.toLowerCase());
+
+        if (!isMember) {
+          console.log("⚠️ Member not found after addition, retrying...");
+          addSuccess = false;
+        } else {
+          console.log("✅ Member verified in group");
+        }
       } catch (addError) {
         console.log(`❌ Add member attempt ${retryCount + 1} failed:`, addError.message);
 
@@ -395,20 +414,24 @@ export async function inviteUserToGlobalGroup(userAddress) {
         }
 
         retryCount++;
-        if (retryCount < maxRetries) {
-          console.log(`⏳ Waiting ${retryDelay}ms before retry...`);
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        if (retryCount < addMaxRetries) {
+          console.log(`⏳ Waiting ${addRetryDelay}ms before retry...`);
+          await new Promise((resolve) => setTimeout(resolve, addRetryDelay));
         }
       }
     }
 
     if (!addSuccess) {
-      throw new Error(`Failed to add user to group after ${maxRetries} attempts`);
+      throw new Error(`Failed to add user to group after ${addMaxRetries} attempts`);
     }
 
     // Update caches
     memberCache.add(normalizedAddress);
     invitationQueue.set(normalizedAddress, now);
+
+    // Final sync to ensure everything is up to date
+    await globalGroup.sync();
+    console.log("✅ Final group sync completed");
 
     return {
       success: true,
